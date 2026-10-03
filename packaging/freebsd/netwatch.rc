@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+# PROVIDE: netwatch
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+#
+# The netwatch fleet agent (`netwatch daemon`) as an rc(8) service.
+# Enable with `sysrc netwatch_enable=YES`. The backend URL and API key
+# come from /usr/local/etc/netwatch/agent.env (root:wheel, 0640), never
+# from flags, so the key does not show up in `ps`.
+#
+# netwatch_enable (bool):   Set to NO by default.
+# netwatch_env_file (path): Defaults to /usr/local/etc/netwatch/agent.env.
+# netwatch_flags (str):     Extra arguments appended to `netwatch daemon`,
+#                           e.g. --insecure-remote for an http:// backend.
+#
+# The agent's stdout and stderr go to syslog under the tag "netwatch"; its
+# own log is in /var/cache/netwatch.
+
+# rc.subr reads rcvar, command and the rest; shellcheck cannot see that.
+# shellcheck disable=SC1090,SC1091,SC2034
+. /etc/rc.subr
+
+name="netwatch"
+rcvar="netwatch_enable"
+desc="netwatch fleet agent"
+
+load_rc_config $name
+: "${netwatch_enable:=NO}"
+: "${netwatch_env_file:=/usr/local/etc/netwatch/agent.env}"
+: "${netwatch_flags:=}"
+
+# daemon(8) supervises the agent and restarts it 5s after a crash. The
+# pidfile is the supervisor's (-P), not the agent's: `service netwatch stop`
+# signals daemon(8), which passes SIGTERM on to the agent, waits for it to
+# flush its queue, and exits. Signalling the agent directly would just get
+# it restarted.
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+command_args="-f -S -s info -T ${name} -P ${pidfile} -R 5 /usr/local/bin/netwatch daemon ${netwatch_flags}"
+
+start_precmd="netwatch_precmd"
+netwatch_precmd()
+{
+	if [ ! -r "${netwatch_env_file}" ]; then
+		err 1 "${netwatch_env_file} is missing; copy it from ${netwatch_env_file}.sample"
+	fi
+	# Each line is KEY=value; export them for the daemon(8) child.
+	set -a
+	. "${netwatch_env_file}"
+	set +a
+	# service(8) runs with HOME=/, which would put netwatch's per-user
+	# directories under /. Use FreeBSD's instead: log and baselines in
+	# /var/cache/netwatch, learned state in /var/db/netwatch, config.toml in
+	# /usr/local/etc/netwatch.
+	export XDG_CACHE_HOME=/var/cache XDG_STATE_HOME=/var/db XDG_CONFIG_HOME=/usr/local/etc
+}
+
+run_rc_command "$1"

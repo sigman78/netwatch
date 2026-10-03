@@ -9,7 +9,7 @@ exiting.
 
 ## Configuration
 
-Both units pass the backend endpoint and API key via environment variables
+The units pass the backend endpoint and API key via environment variables
 (`NETWATCH_REMOTE_URL`, `NETWATCH_API_KEY`) rather than CLI flags, so the key
 never appears in `ps`. The equivalent manual invocation is:
 
@@ -53,3 +53,19 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/com.netwatch.agent.plist
 
 Full eBPF/PKTAP attribution on macOS requires root; without it the daemon falls
 back to lsof/ss-based attribution.
+
+## FreeBSD / OPNsense (rc.d)
+
+```sh
+pkg add ./netwatch-<version>.pkg      # the release asset; see packaging/freebsd/
+# set NETWATCH_REMOTE_URL / NETWATCH_API_KEY in /usr/local/etc/netwatch/agent.env, then:
+sysrc netwatch_enable=YES
+service netwatch start
+```
+
+The package installs `packaging/freebsd/netwatch.rc` as
+`/usr/local/etc/rc.d/netwatch` and creates `agent.env` (root:wheel, 0640) from
+its sample. The rc script reads the file and runs `netwatch daemon` under
+daemon(8), which restarts it if it exits and sends its output to syslog. It
+runs as root: capture on FreeBSD needs `/dev/bpf`, which has no capability to
+grant in its place. `packaging/freebsd/README.md` covers building the package.

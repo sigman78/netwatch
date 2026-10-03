@@ -1,0 +1,41 @@
+# pkg(8) manifest for netwatch, rendered by scripts/freebsd-pkg.sh: it drops
+# these comment lines and fills in @VERSION@, @ABI@, @ARCH@ and @SHLIBS@.
+# The rest is JSON, so both `pkg create -M` and scripts/freebsd-pkg.py read
+# the same file.
+#
+# deps is empty on purpose: the binary links only against libraries in
+# FreeBSD base (libpcap, libc, libm, libthr, libgcc_s), which are listed in
+# shlibs_required and are not packages.
+#
+# The scripts give etc/netwatch/agent.env the ports tree's @sample
+# behaviour, which `pkg create` cannot do outside the ports tree: install
+# copies the sample to agent.env unless one exists, and deinstall removes
+# agent.env only if it was never edited. An upgrade is a deinstall then an
+# install, so an edited agent.env survives it.
+{
+  "name": "netwatch",
+  "origin": "net/netwatch",
+  "version": "@VERSION@",
+  "comment": "Real-time network diagnostics in your terminal",
+  "maintainer": "matthew.t.hartley@gmail.com",
+  "www": "https://github.com/matthart1983/netwatch",
+  "abi": "@ABI@",
+  "arch": "@ARCH@",
+  "prefix": "/usr/local",
+  "licenselogic": "single",
+  "licenses": ["MIT"],
+  "categories": ["net"],
+  "desc": "Live per-connection throughput with application-protocol decoding, process\nattribution via sockstat(1), packet and interface views, and a diagnostic\nengine that learns a per-network baseline and opens an issue when that\nbaseline breaks. Runs in a terminal, needs no configuration. Capture needs\nroot (/dev/bpf).\n\nAlso runs as a headless fleet agent: see /usr/local/etc/rc.d/netwatch.",
+  "deps": {},
+  "shlibs_required": [@SHLIBS@],
+  "scripts": {
+    "post-install": "s=\"${PKG_PREFIX}/etc/netwatch/agent.env.sample\"\nf=\"${PKG_PREFIX}/etc/netwatch/agent.env\"\n[ -f \"$f\" ] || cp -p \"$s\" \"$f\"",
+    "pre-deinstall": "s=\"${PKG_PREFIX}/etc/netwatch/agent.env.sample\"\nf=\"${PKG_PREFIX}/etc/netwatch/agent.env\"\nif cmp -s \"$s\" \"$f\"; then rm -f \"$f\"; fi"
+  },
+  "messages": [
+    {
+      "message": "netwatch is installed. Run it as root: capture needs /dev/bpf.\n\nTo run the fleet agent as a service, set NETWATCH_REMOTE_URL and\nNETWATCH_API_KEY in /usr/local/etc/netwatch/agent.env, then:\n\n  sysrc netwatch_enable=YES\n  service netwatch start",
+      "type": "install"
+    }
+  ]
+}

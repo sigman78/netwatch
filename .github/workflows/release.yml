@@ -338,22 +338,42 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
+      # LIBPCAP_LIBDIR pins the link to base's libpcap.so.8. Without it, the
+      # pcap crate asks pkg-config, which finds the libpcap package installed
+      # below and links /usr/local/lib/libpcap.so.1 -- a library a stock
+      # OPNsense or FreeBSD host does not have.
+      #
+      # The .pkg is for OPNsense, which has no ports tree and no compiler:
+      # `pkg add` the release asset and it is installed. scripts/freebsd-pkg.sh
+      # takes the `pkg create` route here, since pkg is in the VM, and labels
+      # the package with the VM's FreeBSD major as its ABI; pkg refuses a
+      # package built for a different major, so this VM's release has to be
+      # the one OPNsense runs (15 for OPNsense 26.7). The script also refuses
+      # a binary that links anything outside base, since the package declares
+      # no dependencies.
       - name: Build inside a FreeBSD VM
         uses: vmactions/freebsd-vm@v1
         with:
+          # The newest 15.x: the action's default floats with FreeBSD's
+          # releases, and a 16.x VM would stamp the package FreeBSD:16,
+          # which OPNsense 26.x's pkg refuses. Bump when OPNsense does.
+          release: "15"
           usesh: true
           prepare: |
             pkg install -y rust libpcap pkgconf
           run: |
-            cargo build --release
+            LIBPCAP_LIBDIR=/usr/lib cargo build --release
             cp target/release/netwatch netwatch-freebsd-x86_64
             tar czf netwatch-freebsd-x86_64.tar.gz netwatch-freebsd-x86_64
+            cp "$(scripts/freebsd-pkg.sh target/release/netwatch)" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: netwatch-freebsd-x86_64
-          path: netwatch-freebsd-x86_64.tar.gz
+          path: |
+            netwatch-freebsd-x86_64.tar.gz
+            netwatch-*.pkg
 
   release:
     needs: [build, build-freebsd]
@@ -373,7 +393,7 @@ jobs:
       - name: Generate SHA256SUMS
         run: |
           shopt -s nullglob
-          sha256sum *.tar.gz *.zip *.deb *.rpm | sort -k2 > SHA256SUMS
+          sha256sum *.tar.gz *.zip *.deb *.rpm *.pkg | sort -k2 > SHA256SUMS
           cat SHA256SUMS
 
       # Signed provenance tying each artifact to this workflow, commit and
@@ -387,6 +407,7 @@ jobs:
             *.zip
             *.deb
             *.rpm
+            *.pkg
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -404,6 +425,7 @@ jobs:
             *.zip
             *.deb
             *.rpm
+            *.pkg
             SHA256SUMS
 
   # Multi-arch image from the binaries the build job already produced, so the

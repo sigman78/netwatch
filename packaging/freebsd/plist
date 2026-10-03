@@ -1,0 +1,10 @@
+bin/netwatch
+@(root,wheel,0755) etc/rc.d/netwatch
+@(root,wheel,0640) etc/netwatch/agent.env.sample
+share/man/man1/netwatch.1.gz
+share/bash-completion/completions/netwatch
+share/zsh/site-functions/_netwatch
+share/fish/vendor_completions.d/netwatch.fish
+share/doc/netwatch/README.md
+share/doc/netwatch/CHANGELOG.md
+share/licenses/netwatch/LICENSE
