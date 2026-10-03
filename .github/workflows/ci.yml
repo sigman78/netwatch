@@ -79,6 +79,51 @@ jobs:
             cargo build
             cargo test
 
+  # The `freebsd` job above is the one that counts: the real OS, the tests
+  # run. It is also the slowest job here, since the VM compiles every
+  # dependency from scratch on every run. This one gets the build half of
+  # that answer in a few minutes, on the plain Linux host:
+  # scripts/freebsd-cross.sh checks against FreeBSD's own base system (the
+  # release's base.txz, unpacked as a sysroot) with the host's clang and
+  # lld. A change that breaks the FreeBSD build -- shared code reaching for
+  # a Linux-only API, a cfg that leaves src/platform/freebsd.rs a function
+  # short -- fails here first. It is only a `check`: nothing is run, so a
+  # FreeBSD behaviour regression is still the VM job's to catch. The same
+  # script, without `check`, builds a FreeBSD binary that runs.
+  freebsd-check:
+    runs-on: ubuntu-latest
+    env:
+      # Read by the script, and keys the sysroot cache below.
+      FREEBSD_RELEASE: "15.1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-freebsd
+      - uses: Swatinem/rust-cache@v2
+
+      # The runner image has clang, but its lld and llvm-ar are not
+      # guaranteed to be there under the unversioned names the script calls.
+      # mimalloc-sys and ring compile C from their build scripts even for a
+      # `check`, so the cross C compiler is needed, not just rustc.
+      - name: Install clang, lld and llvm-ar
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm
+
+      # Otherwise every run downloads base.txz (about 160 MB) from FreeBSD's
+      # mirror. A release's base.txz never changes, so the release is the
+      # key, plus the script's hash, since the script decides what is
+      # unpacked from it.
+      - name: Cache the FreeBSD sysroot
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/netwatch/freebsd-sysroot
+          key: freebsd-sysroot-${{ env.FREEBSD_RELEASE }}-amd64-${{ hashFiles('scripts/freebsd-cross.sh') }}
+
+      - name: cargo check x86_64-unknown-freebsd
+        run: scripts/freebsd-cross.sh --arch amd64 check
+
   # Only the release workflow actually builds for armv5te (Iomega ix2-dl /
   # Marvell Kirkwood), and that only runs on a tag push. Without this, a
   # change like re-introducing an AtomicU64 (armv5te has no native 64-bit
